@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Move CI and release verification to the `xcode-27` runner's default toolchain while retaining macOS 13 support.
 - Fix Chromium cookie imports from idle WAL-mode databases without sidecars, preserving active WAL values without modifying source files. (#33, thanks @pranshug2704)
 - Fix Firefox and other Gecko cookie imports failing when an idle WAL-mode profile has no sidecars, while preserving active WAL cookies and leaving browser files unchanged. (#33, #34, thanks @pranshug2704)
 
