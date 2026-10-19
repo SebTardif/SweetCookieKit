@@ -84,6 +84,8 @@ The package includes DocC documentation and a standalone example executable:
 
 ## Development
 
+CI and release verification use the default Xcode 27 toolchain on GitHub's Apple silicon `xcode-27` runner, retaining the macOS 13 deployment target and Swift 6.2 package minimum.
+
 ```sh
 swift build
 swift test
