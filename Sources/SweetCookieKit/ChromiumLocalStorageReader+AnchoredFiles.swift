@@ -59,7 +59,7 @@ final class ChromiumAnchoredFiles: @unchecked Sendable {
 
     init?(directory: URL) {
         guard directory.isFileURL, directory.path.hasPrefix("/") else { return nil }
-        let root = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
+        let root = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW)
         guard root >= 0 else { return nil }
         var descriptors = [root]
         var links: [DirectoryLink] = []
@@ -102,37 +102,35 @@ final class ChromiumAnchoredFiles: @unchecked Sendable {
     }
 
     func read(_ url: URL) throws -> Data {
-        let name = url.lastPathComponent
-        guard url.deletingLastPathComponent().path == self.directory.path,
-              let expected = self.initial[name] else { throw CocoaError(.fileReadNoPermission) }
-        ChromiumLocalStorageReader.strictReadObserver?(.willOpen(name))
-        let file = openat(self.descriptor, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
-        guard file >= 0 else { throw CocoaError(.fileReadNoPermission) }
-        defer { _ = close(file) }
-        var before = stat()
-        guard fstat(file, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
-              Stamp(before) == expected, before.st_size >= 0, before.st_size <= 64 * 1024 * 1024
-        else { throw CocoaError(.fileReadCorruptFile) }
-        ChromiumLocalStorageReader.strictReadObserver?(.didOpen(name))
-        var data = Data(count: Int(before.st_size))
-        let complete = data.withUnsafeMutableBytes { buffer -> Bool in
-            var offset = 0
-            while offset < buffer.count {
-                let count = pread(file, buffer.baseAddress!.advanced(by: offset), buffer.count - offset, off_t(offset))
-                if count < 0, errno == EINTR {
-                    continue
-                }
-                guard count > 0 else { return false }
-                offset += count
-            }
-            return true
-        }
-        var after = stat()
-        guard complete, fstat(file, &after) == 0, Stamp(after) == expected else {
+        guard let file = self.open(url), file.size <= 64 * 1024 * 1024,
+              let data = file.read(0..<file.size), file.unchanged()
+        else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        ChromiumLocalStorageReader.strictReadObserver?(.didRead(name))
         return data
+    }
+
+    func open(_ url: URL) -> LevelDBFile? {
+        let name = url.lastPathComponent
+        guard url.deletingLastPathComponent().path == self.directory.path,
+              let expected = self.initial[name] else { return nil }
+        ChromiumLocalStorageReader.strictReadObserver?(.willOpen(name))
+        let file = openat(self.descriptor, name, O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK)
+        guard file >= 0 else { return nil }
+        var before = stat()
+        guard fstat(file, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
+              Stamp(before) == expected, let size = Int(exactly: before.st_size), size >= 0
+        else {
+            _ = close(file)
+            return nil
+        }
+        ChromiumLocalStorageReader.strictReadObserver?(.didOpen(name))
+        return LevelDBFile(descriptor: file, size: size) {
+            var after = stat()
+            guard fstat(file, &after) == 0, Stamp(after) == expected else { return false }
+            ChromiumLocalStorageReader.strictReadObserver?(.didRead(name))
+            return true
+        }
     }
 
     private static func snapshot(_ descriptor: Int32) -> [String: Stamp]? {

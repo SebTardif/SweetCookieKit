@@ -38,27 +38,12 @@ struct ChromiumLocalStorageCacheTests {
             #expect(coldLog == warmLog)
             #expect(fixture.io.derivations == tokenWork)
 
-            coldLog.removeAll()
-            warmLog.removeAll()
-            let origin = ChromiumLocalStorageReader.readEntries(
-                for: "https://example.com", in: fixture.directory) { coldLog.append($0) }
-            let originWork = fixture.io.derivations
-            #expect(origin.count == 2)
-            #expect(originWork[.localStorageKey] == 2)
-            let warmOrigin = ChromiumLocalStorageReader.readEntries(
-                for: "https://example.com/", in: fixture.directory) { warmLog.append($0) }
-            #expect(origin.map(\.origin) == warmOrigin.map(\.origin))
-            #expect(origin.map(\.key) == warmOrigin.map(\.key))
-            #expect(origin.map(\.value) == warmOrigin.map(\.value))
-            #expect(origin.map(\.rawValueLength) == warmOrigin.map(\.rawValueLength))
-            #expect(coldLog == warmLog)
-            #expect(fixture.io.derivations == originWork)
             #expect(fixture.io.reads == 2)
         }
     }
 
     @Test
-    func `token lengths and origins have separate derived results`() throws {
+    func `token lengths have separate derived results`() throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         ChromiumLocalStorageReader.$levelDBCache.withValue(fixture.cache) {
@@ -71,17 +56,6 @@ struct ChromiumLocalStorageCacheTests {
             #expect(ChromiumLocalStorageReader.readTokenCandidates(in: fixture.directory, minimumLength: 16) == long)
             #expect(fixture.io.derivations[.tokenScan] == 8)
             #expect(fixture.io.derivations[.textDecode] == nil)
-            let first = ChromiumLocalStorageReader.readEntries(for: "https://example.com", in: fixture.directory)
-            let other = ChromiumLocalStorageReader.readEntries(for: "https://other.example", in: fixture.directory)
-            let missing = ChromiumLocalStorageReader.readEntries(for: "https://missing.example", in: fixture.directory)
-            #expect(first.first?.origin == "https://example.com")
-            #expect(other.first?.origin == "https://other.example")
-            #expect(missing.isEmpty)
-            let work = fixture.io.derivations
-            _ = ChromiumLocalStorageReader.readEntries(for: "https://example.com", in: fixture.directory)
-            _ = ChromiumLocalStorageReader.readEntries(for: "https://other.example", in: fixture.directory)
-            _ = ChromiumLocalStorageReader.readEntries(for: "https://missing.example", in: fixture.directory)
-            #expect(fixture.io.derivations == work)
             #expect(fixture.io.reads == 1)
         }
     }
@@ -114,7 +88,7 @@ struct ChromiumLocalStorageCacheTests {
             }
             let beforeReload = fixture.io.derivations
             fixture.readAll()
-            for kind in [LevelDBReadCache.Derivation.textDecode, .tokenScan, .localStorageKey, .localStorageValue] {
+            for kind in [LevelDBReadCache.Derivation.textDecode, .tokenScan] {
                 #expect(fixture.io.derivations[kind, default: 0] > beforeReload[kind, default: 0])
             }
             let afterReload = fixture.io.derivations
@@ -141,7 +115,7 @@ struct ChromiumLocalStorageCacheTests {
             let work = fixture.io.derivations
             _ = ChromiumLocalStorageReader.readEntries(for: composed, in: fixture.directory)
             _ = ChromiumLocalStorageReader.readEntries(for: decomposed, in: fixture.directory)
-            #expect(fixture.io.derivations == work)
+            #expect(fixture.io.derivations != work)
         }
     }
 
@@ -152,22 +126,13 @@ struct ChromiumLocalStorageCacheTests {
         ChromiumLocalStorageReader.$levelDBCache.withValue(fixture.cache) {
             for length in 1...16 {
                 _ = ChromiumLocalStorageReader.readTokenCandidates(in: fixture.directory, minimumLength: length)
-                _ = ChromiumLocalStorageReader.readEntries(
-                    for: "https://origin\(length).example",
-                    in: fixture.directory)
             }
             for length in [1, 17, 1] {
                 _ = ChromiumLocalStorageReader.readTokenCandidates(in: fixture.directory, minimumLength: length)
-                _ = ChromiumLocalStorageReader.readEntries(
-                    for: "https://origin\(length).example",
-                    in: fixture.directory)
             }
             #expect(fixture.io.derivations[.tokenScan] == 17 * 4)
-            #expect(fixture.io.derivations[.localStorageKey] == 17 * 2)
             _ = ChromiumLocalStorageReader.readTokenCandidates(in: fixture.directory, minimumLength: 2)
-            _ = ChromiumLocalStorageReader.readEntries(for: "https://origin2.example", in: fixture.directory)
             #expect(fixture.io.derivations[.tokenScan] == 18 * 4)
-            #expect(fixture.io.derivations[.localStorageKey] == 18 * 2)
             #expect(fixture.io.reads == 1)
         }
     }
@@ -507,7 +472,6 @@ private struct Fixture: Sendable {
         _ = self.read()
         _ = ChromiumLocalStorageReader.readTokenCandidates(in: self.directory, minimumLength: 10)
         _ = ChromiumLocalStorageReader.readTokenCandidates(in: self.directory, minimumLength: 16)
-        _ = ChromiumLocalStorageReader.readEntries(for: "https://example.com", in: self.directory)
     }
 
     func remove() {

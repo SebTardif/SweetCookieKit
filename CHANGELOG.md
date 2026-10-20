@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stream origin-scoped Chromium Local Storage and strict exact-key reads without retaining unrelated values or populating the whole-store cache. (steipete/CodexBar#4649)
+
 - Fix missing Firefox and other Gecko session cookies by merging ordinary saved-session cookies with SQLite records while excluding unsupported container and partition identities. (#36, thanks @sqmagellan)
 - Match exact cookie domains case-insensitively in Chromium and Gecko SQLite queries, consistent with other query modes.
 - Move CI and release verification to the `xcode-27` runner's default toolchain while retaining macOS 13 support.

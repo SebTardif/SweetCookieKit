@@ -34,6 +34,7 @@ public enum ChromiumLocalStorageReader {
     static let footerSize = 48
     private static let tokenBytes = Set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-+/=".utf8)
 
+    /// Streams one origin without populating the whole-store memo; only matching values are decoded.
     public static func readEntries(
         for origin: String,
         in levelDBURL: URL,
@@ -44,12 +45,19 @@ public enum ChromiumLocalStorageReader {
             logger?("[chromium-storage] \(message)")
         }
 
-        guard let result = self.withLevelDBEntries(in: levelDBURL, logger: log, derive: { entries, derived in
-            // String equality folds Unicode spellings, but the returned origin preserves the caller's bytes.
-            derived.origins.value(for: Data(normalizedOrigin.utf8)) {
-                self.decodeEntries(entries, for: normalizedOrigin)
-            }
-        }) else { return [] }
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: levelDBURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else { return [] }
+        var complete = true
+        let entries = self.streamFiles(
+            files,
+            cache: self.levelDBCache,
+            complete: &complete,
+            matches: { key, _ in
+                guard let local = self.decodeLocalStorageKey(key) else { return false }
+                return self.originMatches(self.normalizeOrigin(local.origin), normalizedOrigin)
+            },
+            logger: log)
+        let result = self.decodeEntries(entries, for: normalizedOrigin)
 
         if result.decodedKeys == 0 {
             log("No local storage keys decoded in \(levelDBURL.lastPathComponent)")
@@ -99,7 +107,7 @@ public enum ChromiumLocalStorageReader {
         } ?? []
     }
 
-    private static func decodeEntries(
+    static func decodeEntries(
         _ entries: [LevelDBEntry],
         for normalizedOrigin: String) -> LevelDBReadCache.OriginResult
     {
