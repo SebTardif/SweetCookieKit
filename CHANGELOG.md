@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.5.9 — 2026-10-20
 
 **Highlights:** Origin-filtered Chromium Local Storage reads now stream record by record, so reading one site's values from a large store uses a few MiB instead of hundreds; Firefox and other Gecko session cookies are imported again, and idle WAL-mode Chromium and Gecko databases without sidecars read correctly.
