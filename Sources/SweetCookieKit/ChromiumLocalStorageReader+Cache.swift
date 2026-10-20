@@ -29,7 +29,6 @@ final class LevelDBReadCache: @unchecked Sendable {
     struct DerivedResults {
         var text: [ChromiumLevelDBTextEntry]?
         var tokens = Variants<Int, [String]>()
-        var origins = Variants<Data, OriginResult>()
     }
 
     struct Variants<Key: Hashable, Value> {

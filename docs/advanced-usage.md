@@ -92,6 +92,8 @@ let entries = ChromiumLocalStorageReader.readEntries(
     in: levelDBURL)
 ```
 
+This call streams `.log`, `.ldb`, and `.sst` files, filters raw keys before copying or decoding values, and retains only matching records while selecting the current values. Even a write batch spanning many log blocks does not require loading its unrelated values. Origin matching keeps the existing host, scheme, trailing-slash, and partitioned-storage-key behavior. Repeated calls read the files again; origin results are not memoized. Memory depends on matching records, the current table block/index, and manifest metadata rather than unrelated stored values.
+
 For lower-level inspection, `ChromiumLevelDBReader` exposes best-effort text decoding and token candidate scanning:
 
 ```swift
@@ -112,9 +114,9 @@ let rawKey = Data("_https://example.com\0".utf8) + Data([1]) + Data("access_toke
 let rawValue = ChromiumLocalStorageReader.readCurrentValue(forRawKey: rawKey, in: levelDBURL)
 ```
 
-The result contains the stored bytes, including Chromium's encoding prefix. Matching is byte-for-byte, without origin normalization or token scanning. The reader requires `CURRENT`, a valid manifest, and all referenced live tables and required recovery logs. It checks record/block checksums and sequence conflicts before selecting the current value; missing or deleted keys and rejected reads all return `nil`. It never falls back to orphan-file scanning or the shared memo.
+The result contains the stored bytes, including Chromium's encoding prefix. Matching is byte-for-byte, without origin normalization or token scanning. The reader requires `CURRENT`, a valid manifest, and all referenced live tables and required recovery logs. It checks record/block checksums and sequence conflicts before selecting the current value, including conflicts on unrelated keys; missing or deleted keys and rejected reads all return `nil`. It never falls back to orphan-file scanning or the shared memo. It retains only matching values; bounded duplicate-detection metadata may trigger extra filtered passes over the live files.
 
-Supply a physical file URL with no symlinked directory components. Directory descriptors anchor `openat`/`O_NOFOLLOW` file opens and `pread` reads; symlinked files, files over 64 MiB, and observable replacement or mutation are rejected. This is still a live read, not a transactional snapshot: changes after the final check and rename/restore races cannot all be excluded.
+Supply a physical file URL with no symlinked directory components. Directory descriptors anchor `openat`/`O_NOFOLLOW` file opens and `pread` reads; symlinked files and observable replacement or mutation are rejected. Data files are streamed, including files larger than 64 MiB; `CURRENT` and manifest metadata retain their 64 MiB per-file limit. This is still a live read, not a transactional snapshot: changes after the final check and rename/restore races cannot all be excluded.
 
 ### Best-effort reads and caching
 
@@ -122,18 +124,18 @@ All three readers select the highest LevelDB sequence for each raw user key befo
 
 When `CURRENT` is present, the reader replays its manifest to select live tables and recoverable logs, excluding obsolete tables and logs left after compaction. Without `CURRENT`, it scans all `.log`, `.ldb`, and `.sst` files using the same sequence ordering; this fallback cannot identify obsolete files whose records have no newer counterpart. An unreadable or malformed current manifest yields no entries rather than guessing which files are live. Reads remain best effort against a running browser, without a transactional snapshot or full LevelDB checksum validation.
 
-All three readers share an in-memory memo of decoded LevelDB entries, before origin or token filtering. The memo holds at most eight directories, evicts the least recently used directory, and reuses a result for at most ten minutes from its original read. Every lookup checks file names, sizes, nanosecond modification times, inode/device identity, and permission/change metadata. Changes to `CURRENT`, `MANIFEST-*`, `.log`, `.ldb`, or `.sst` files invalidate the memo.
+Whole-store text and token scans share an in-memory memo of raw LevelDB entries, before text decoding or token filtering. Origin-scoped and strict exact-key reads bypass this memo entirely. The memo holds at most eight directories, evicts the least recently used directory, and reuses a result for at most ten minutes from its original read. Every lookup checks file names, sizes, nanosecond modification times, inode/device identity, and permission/change metadata. Changes to `CURRENT`, `MANIFEST-*`, `.log`, `.ldb`, or `.sst` files invalidate the memo.
 
-Each directory memo also retains the text-entry array, token candidates keyed by `minimumLength`, and local-storage results keyed by normalized origin. Repeated queries return the original arrays in the same order without decoding text or rescanning tokens. Token and origin results each retain at most sixteen parameter variants using LRU eviction. These derived results expire and invalidate together with their raw entries; deriving a new variant does not extend the original ten-minute lifetime.
+Each directory memo also retains the text-entry array and token candidates keyed by `minimumLength`. Repeated whole-store queries return the original arrays in the same order without decoding text or rescanning tokens. Token results retain at most sixteen parameter variants using LRU eviction. These derived results expire and invalidate together with their raw entries; deriving a new variant does not extend the original ten-minute lifetime.
 
 Only complete reads with successful decoding and matching before/after file snapshots are memoized. Unreadable, missing, malformed, or concurrently changing files retain the usual best-effort results and diagnostics, without caching those results. Hits preserve traversal order and replay the same diagnostics. Directory metadata is still inspected on hits, but file contents are not read again.
 
-Cached values can contain session tokens and are never persisted or logged by the memo. Hosts can explicitly drop the shared memo on sign-out or whenever they want the next call to read files again:
+Cached values can contain session tokens and are never persisted or logged by the memo. Hosts using whole-store scans can explicitly drop the shared memo on sign-out or whenever they want the next scan to read files again:
 
 ```swift
 ChromiumLocalStorageReader.invalidateCache()
 ```
 
-Invalidation also covers calls through `ChromiumLevelDBReader`. Reads and invalidation are thread-safe; invalidation waits for any active traversal or derivation before clearing its memo. Arrays already returned to callers remain owned by those callers.
+Invalidation also covers calls through `ChromiumLevelDBReader`. Reads and invalidation are thread-safe; invalidation waits for any active memoized traversal or derivation before clearing its memo. Streaming reads have no shared results to invalidate. Arrays already returned to callers remain owned by those callers.
 
 The ten-minute reuse limit uses a continuous clock, so time spent asleep also counts toward expiry.

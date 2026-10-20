@@ -72,6 +72,8 @@ let records = try BrowserCookieKeychainAccessGate.withUserInteractionDisallowed 
 
 The [advanced usage guide](docs/advanced-usage.md) covers query matching, browser ordering, prompt preflighting, noninteractive imports, and Chromium local-storage helpers.
 
+For origin-scoped Local Storage, call `ChromiumLocalStorageReader.readEntries(for:in:)`. It streams LevelDB files and decodes only matching values, without retaining a whole-store cache. `readCurrentValue(forRawKey:in:)` uses the same filtered traversal for strict, byte-exact credential reads.
+
 ## API and examples
 
 The package includes DocC documentation and a standalone example executable:
