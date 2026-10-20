@@ -15,7 +15,7 @@ let query = BrowserCookieQuery(
     includeExpired: false)
 ```
 
-Domain matching supports `.contains`, `.suffix`, and `.exact`. An empty `domains` array does not filter by domain.
+Domain matching supports `.contains`, `.suffix`, and `.exact` and is case-insensitive. An empty `domains` array does not filter by domain.
 
 Use a concrete store when the user has selected a profile:
 
@@ -50,6 +50,8 @@ for browser in Browser.defaultImportOrder {
 The result stays grouped by profile and store. Use `client.stores(in:)` when an interface needs to list all available sources before reading them.
 
 Chromium and Gecko cookie imports read temporary copies of the database and any WAL sidecars. Both active profiles with uncheckpointed cookies and idle WAL-mode profiles without sidecars are supported; the browser's original files remain unchanged.
+
+Firefox and other Gecko imports also read session cookies from the selected profile's `sessionstore-backups/recovery.jsonlz4`, or `recovery.baklz4` when the primary file is missing. These cookies normally have no expiry; explicit expiry values are preserved and filtered like database cookies. The same domain filters apply to both sources. SQLite wins when both sources contain the same host, name, and path. Missing, unreadable, malformed, or oversized recovery files do not prevent database imports; compressed files and decoded JSON are each limited to 64 MiB. Recovery data reflects the browser's last saved session snapshot, so very recent login or logout changes may not yet be present. A corrupt primary file does not fall back to the older backup.
 
 ## Explain Keychain prompts
 

@@ -337,7 +337,8 @@ enum BrowserCookieDomainMatcher {
                 return "\(column) LIKE '%\(value)'"
             case .exact:
                 let normalized = self.escapeForSQL(self.normalizeDomain(raw))
-                return "(\(column) = '\(normalized)' OR \(column) = '.\(normalized)')"
+                return "(\(column) = '\(normalized)' COLLATE NOCASE " +
+                    "OR \(column) = '.\(normalized)' COLLATE NOCASE)"
             }
         }
         return clauses.joined(separator: " OR ")

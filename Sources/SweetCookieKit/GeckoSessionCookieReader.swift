@@ -1,0 +1,74 @@
+#if os(macOS)
+import Compression
+import CoreFoundation
+import Foundation
+
+enum GeckoSessionCookieReader {
+    private static let maximumSize = 64 * 1024 * 1024
+    private static let magic = Data("mozLz40\0".utf8)
+
+    static func readCookies(in profile: URL) -> [GeckoCookieImporter.CookieRecord] {
+        let directory = profile.appendingPathComponent("sessionstore-backups")
+        let primary = directory.appendingPathComponent("recovery.jsonlz4")
+        // Only fall back when missing; a corrupt current file must not revive older credentials.
+        let source = FileManager.default.fileExists(atPath: primary.path)
+            ? primary : directory.appendingPathComponent("recovery.baklz4")
+        guard let metadata = try? source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              metadata.isRegularFile == true,
+              let size = metadata.fileSize, size <= Self.maximumSize,
+              let handle = try? FileHandle(forReadingFrom: source)
+        else { return [] }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: Self.maximumSize + 1),
+              data.count <= Self.maximumSize,
+              let json = Self.decompress(data),
+              let root = (try? JSONSerialization.jsonObject(with: json)) as? [String: Any],
+              let cookies = root["cookies"] as? [Any]
+        else { return [] }
+        return cookies.compactMap(Self.cookieRecord)
+    }
+
+    private static func decompress(_ data: Data) -> Data? {
+        guard data.count > 12, data.starts(with: Self.magic) else { return nil }
+        let size = (0..<4).reduce(0) { $0 | (Int(data[8 + $1]) << (8 * $1)) }
+        guard size > 0, size <= Self.maximumSize else { return nil }
+        // The buffer API reports a full buffer for truncated output; one extra byte distinguishes it.
+        var output = [UInt8](repeating: 0, count: size + 1)
+        let decodedCount = data.withUnsafeBytes { source in
+            compression_decode_buffer(
+                &output,
+                output.count,
+                source.bindMemory(to: UInt8.self).baseAddress!.advanced(by: 12),
+                data.count - 12,
+                nil,
+                COMPRESSION_LZ4_RAW)
+        }
+        guard decodedCount == size else { return nil }
+        return Data(output.prefix(size))
+    }
+
+    private static func cookieRecord(_ entry: Any) -> GeckoCookieImporter.CookieRecord? {
+        guard let cookie = entry as? [String: Any],
+              let host = cookie["host"] as? String, !host.isEmpty,
+              cookie["name"] == nil || cookie["name"] is String,
+              cookie["path"] == nil || cookie["path"] is String,
+              let value = cookie["value"] as? String
+        else { return nil }
+        var expires: Date?
+        if let rawExpiry = cookie["expiry"] {
+            guard let expiry = rawExpiry as? NSNumber,
+                  CFGetTypeID(expiry) != CFBooleanGetTypeID(), expiry.doubleValue.isFinite
+            else { return nil }
+            expires = Date(timeIntervalSince1970: expiry.doubleValue)
+        }
+        return GeckoCookieImporter.CookieRecord(
+            host: host,
+            name: cookie["name"] as? String ?? "",
+            path: cookie["path"] as? String ?? "",
+            value: value,
+            expires: expires,
+            isSecure: cookie["secure"] as? Bool ?? false,
+            isHTTPOnly: cookie["httponly"] as? Bool ?? false)
+    }
+}
+#endif
