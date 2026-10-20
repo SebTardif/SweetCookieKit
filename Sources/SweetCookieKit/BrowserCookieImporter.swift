@@ -145,7 +145,10 @@ public struct BrowserCookieClient: Sendable {
                     from: store,
                     matchingDomains: query.domains,
                     domainMatch: query.domainMatch)
-                records = loaded.map { record in
+                records = loaded.filter { record in
+                    // Sessionstore expiry limits validity without making the imported cookie persistent.
+                    query.includeExpired || record.sessionExpiry.map { $0 >= query.referenceDate } ?? true
+                }.map { record in
                     BrowserCookieRecord(
                         domain: BrowserCookieDomainMatcher.normalizeDomain(record.host),
                         name: record.name,

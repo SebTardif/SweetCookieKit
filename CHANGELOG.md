@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Fix missing Firefox and other Gecko session cookies by merging ordinary session recovery cookies with SQLite records while excluding unsupported container and partition identities. (#36, thanks @sqmagellan)
+- Fix missing Firefox and other Gecko session cookies by merging ordinary saved-session cookies with SQLite records while excluding unsupported container and partition identities. (#36, thanks @sqmagellan)
 - Match exact cookie domains case-insensitively in Chromium and Gecko SQLite queries, consistent with other query modes.
 - Move CI and release verification to the `xcode-27` runner's default toolchain while retaining macOS 13 support.
 - Fix Chromium cookie imports from idle WAL-mode databases without sidecars, preserving active WAL values without modifying source files. (#33, thanks @pranshug2704)

@@ -76,7 +76,9 @@ struct GeckoSessionCookieTests {
         let now = Date(timeIntervalSince1970: 200)
         let records = try fixture.records(query: .init(referenceDate: now))
         #expect(records.map(\.name) == ["persistent", "fresh", "session"])
-        #expect(records.first { $0.name == "fresh" }?.expires == Date(timeIntervalSince1970: 300))
+        let session = try #require(records.first { $0.name == "fresh" })
+        #expect(session.expires == nil)
+        #expect(try #require(BrowserCookieClient.makeHTTPCookies([session]).first).isSessionOnly)
         #expect(try fixture.records(query: .init(includeExpired: true, referenceDate: now))
             .map(\.name) == ["persistent", "expired", "fresh", "session"])
     }
@@ -156,6 +158,35 @@ struct GeckoSessionCookieTests {
         #expect(try fixture.records().map(\.value) == ["synthetic-db"])
         try Data("corrupt current snapshot".utf8).write(to: primary)
         #expect(try fixture.records().map(\.value) == ["synthetic-db"])
+    }
+
+    @Test
+    func `clean shutdown snapshot takes precedence over stale recovery backup`() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try fixture.writeRecovery(cookies: [Self.cookie(value: "stale-backup")], name: "recovery.baklz4")
+        let clean = try fixture.writeRecovery(cookies: [Self.cookie(value: "clean")], name: "sessionstore.jsonlz4")
+        #expect(try fixture.records().map(\.value) == ["synthetic-db", "clean"])
+        let primary = try fixture.writeRecovery(cookies: [Self.cookie(value: "current")])
+        #expect(try fixture.records().map(\.value) == ["synthetic-db", "current"])
+        try FileManager.default.removeItem(at: primary)
+        try Data("corrupt clean snapshot".utf8).write(to: clean)
+        #expect(try fixture.records().map(\.value) == ["synthetic-db"])
+    }
+
+    @Test
+    func `isolated SQLite identity does not suppress ordinary recovery cookie`() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        var handle: OpaquePointer?
+        try #require(sqlite3_open(fixture.database.path, &handle) == SQLITE_OK)
+        defer { sqlite3_close(handle) }
+        let addColumn = "ALTER TABLE moz_cookies ADD COLUMN originAttributes TEXT NOT NULL DEFAULT ''"
+        let isolate = "UPDATE moz_cookies SET originAttributes='^userContextId=2'"
+        try #require(sqlite3_exec(handle, addColumn, nil, nil, nil) == SQLITE_OK)
+        try #require(sqlite3_exec(handle, isolate, nil, nil, nil) == SQLITE_OK)
+        try fixture.writeRecovery(cookies: [Self.cookie(host: ".example.com", name: "persistent", value: "ordinary")])
+        #expect(try fixture.records().map(\.value) == ["synthetic-db", "ordinary"])
     }
 
     @Test
@@ -312,7 +343,8 @@ struct GeckoSessionCookieTests {
                 }
                 data.append(json)
             }
-            let url = self.directory.appendingPathComponent("sessionstore-backups/\(name)")
+            let url = self.directory.appendingPathComponent(
+                name == "sessionstore.jsonlz4" ? name : "sessionstore-backups/\(name)")
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url)

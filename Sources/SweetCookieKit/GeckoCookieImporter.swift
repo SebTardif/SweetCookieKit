@@ -27,6 +27,8 @@ enum GeckoCookieImporter {
         let path: String
         let value: String
         let expires: Date?
+        let sessionExpiry: Date?
+        let originAttributes: String
         let isSecure: Bool
         let isHTTPOnly: Bool
     }
@@ -99,11 +101,13 @@ enum GeckoCookieImporter {
         let host: String
         let name: String
         let path: String
+        let originAttributes: String
 
         init(_ cookie: CookieRecord) {
             self.host = cookie.host
             self.name = cookie.name
             self.path = cookie.path
+            self.originAttributes = cookie.originAttributes
         }
     }
 
@@ -162,8 +166,11 @@ enum GeckoCookieImporter {
             column: "host",
             patterns: matchingDomains,
             match: domainMatch)
+        let hasOriginAttributes = sqlite3_table_column_metadata(
+            db, nil, "moz_cookies", "originAttributes", nil, nil, nil, nil, nil) == SQLITE_OK
+        let originAttributesColumn = hasOriginAttributes ? "originAttributes" : "''"
         let sql = """
-        SELECT host, name, path, value, expiry, isSecure, isHttpOnly
+        SELECT host, name, path, value, expiry, isSecure, isHttpOnly, \(originAttributesColumn)
         FROM moz_cookies
         WHERE \(conditions)
         """
@@ -194,6 +201,8 @@ enum GeckoCookieImporter {
                 path: path,
                 value: value,
                 expires: expiresDate,
+                sessionExpiry: nil,
+                originAttributes: Self.readTextColumn(stmt, index: 7) ?? "",
                 isSecure: isSecure,
                 isHTTPOnly: isHTTPOnly))
         }

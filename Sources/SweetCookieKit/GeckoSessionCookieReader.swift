@@ -9,11 +9,14 @@ enum GeckoSessionCookieReader {
 
     static func readCookies(in profile: URL) -> [GeckoCookieImporter.CookieRecord] {
         let directory = profile.appendingPathComponent("sessionstore-backups")
-        let primary = directory.appendingPathComponent("recovery.jsonlz4")
         // Only fall back when missing; a corrupt current file must not revive older credentials.
-        let source = FileManager.default.fileExists(atPath: primary.path)
-            ? primary : directory.appendingPathComponent("recovery.baklz4")
-        guard let metadata = try? source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+        let candidates = [
+            directory.appendingPathComponent("recovery.jsonlz4"),
+            profile.appendingPathComponent("sessionstore.jsonlz4"),
+            directory.appendingPathComponent("recovery.baklz4"),
+        ]
+        guard let source = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
+              let metadata = try? source.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
               metadata.isRegularFile == true,
               let size = metadata.fileSize, size <= Self.maximumSize,
               let handle = try? FileHandle(forReadingFrom: source)
@@ -67,7 +70,9 @@ enum GeckoSessionCookieReader {
             name: cookie["name"] as? String ?? "",
             path: cookie["path"] as? String ?? "",
             value: value,
-            expires: expires,
+            expires: nil,
+            sessionExpiry: expires,
+            originAttributes: "",
             isSecure: cookie["secure"] as? Bool ?? false,
             isHTTPOnly: cookie["httponly"] as? Bool ?? false)
     }
