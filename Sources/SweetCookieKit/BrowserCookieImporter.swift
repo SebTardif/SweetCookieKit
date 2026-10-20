@@ -145,7 +145,10 @@ public struct BrowserCookieClient: Sendable {
                     from: store,
                     matchingDomains: query.domains,
                     domainMatch: query.domainMatch)
-                records = loaded.map { record in
+                records = loaded.filter { record in
+                    // Sessionstore expiry limits validity without making the imported cookie persistent.
+                    query.includeExpired || record.sessionExpiry.map { $0 >= query.referenceDate } ?? true
+                }.map { record in
                     BrowserCookieRecord(
                         domain: BrowserCookieDomainMatcher.normalizeDomain(record.host),
                         name: record.name,
@@ -337,7 +340,8 @@ enum BrowserCookieDomainMatcher {
                 return "\(column) LIKE '%\(value)'"
             case .exact:
                 let normalized = self.escapeForSQL(self.normalizeDomain(raw))
-                return "(\(column) = '\(normalized)' OR \(column) = '.\(normalized)')"
+                return "(\(column) = '\(normalized)' COLLATE NOCASE " +
+                    "OR \(column) = '.\(normalized)' COLLATE NOCASE)"
             }
         }
         return clauses.joined(separator: " OR ")

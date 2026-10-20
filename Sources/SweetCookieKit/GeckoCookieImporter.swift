@@ -2,7 +2,7 @@
 import Foundation
 import SQLite3
 
-/// Reads cookies from Gecko profile cookie DBs (macOS).
+/// Reads cookies from Gecko profile databases and session recovery files (macOS).
 enum GeckoCookieImporter {
     enum ImportError: LocalizedError {
         case cookieDBNotFound(path: String, browser: Browser)
@@ -27,6 +27,8 @@ enum GeckoCookieImporter {
         let path: String
         let value: String
         let expires: Date?
+        let sessionExpiry: Date?
+        let originAttributes: String
         let isSecure: Bool
         let isHTTPOnly: Bool
     }
@@ -77,11 +79,36 @@ enum GeckoCookieImporter {
                 path: "Missing cookie DB for \(store.label)",
                 browser: store.browser)
         }
-        return try Self.readCookiesFromLockedGeckoDB(
+        var cookies = try Self.readCookiesFromLockedGeckoDB(
             sourceDB: sourceDB,
             matchingDomains: domains,
             domainMatch: domainMatch,
             browser: store.browser)
+        var identities = Set(cookies.map(CookieIdentity.init))
+        let sessions = GeckoSessionCookieReader.readCookies(in: sourceDB.deletingLastPathComponent())
+        for cookie in sessions where BrowserCookieDomainMatcher.matches(
+            domain: cookie.host, patterns: domains, match: domainMatch)
+        {
+            // SQLite wins, even for expired rows, so an old recovery value cannot resurrect it.
+            if identities.insert(CookieIdentity(cookie)).inserted {
+                cookies.append(cookie)
+            }
+        }
+        return cookies
+    }
+
+    private struct CookieIdentity: Hashable {
+        let host: String
+        let name: String
+        let path: String
+        let originAttributes: String
+
+        init(_ cookie: CookieRecord) {
+            self.host = cookie.host
+            self.name = cookie.name
+            self.path = cookie.path
+            self.originAttributes = cookie.originAttributes
+        }
     }
 
     // MARK: - DB copy helper
@@ -139,8 +166,11 @@ enum GeckoCookieImporter {
             column: "host",
             patterns: matchingDomains,
             match: domainMatch)
+        let hasOriginAttributes = sqlite3_table_column_metadata(
+            db, nil, "moz_cookies", "originAttributes", nil, nil, nil, nil, nil) == SQLITE_OK
+        let originAttributesColumn = hasOriginAttributes ? "originAttributes" : "''"
         let sql = """
-        SELECT host, name, path, value, expiry, isSecure, isHttpOnly
+        SELECT host, name, path, value, expiry, isSecure, isHttpOnly, \(originAttributesColumn)
         FROM moz_cookies
         WHERE \(conditions)
         """
@@ -171,6 +201,8 @@ enum GeckoCookieImporter {
                 path: path,
                 value: value,
                 expires: expiresDate,
+                sessionExpiry: nil,
+                originAttributes: Self.readTextColumn(stmt, index: 7) ?? "",
                 isSecure: isSecure,
                 isHTTPOnly: isHTTPOnly))
         }
