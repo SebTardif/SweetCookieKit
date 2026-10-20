@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.5.9 — 2026-10-20
+
+**Highlights:** Origin-filtered Chromium Local Storage reads now stream record by record, so reading one site's values from a large store uses a few MiB instead of hundreds; Firefox and other Gecko session cookies are imported again, and idle WAL-mode Chromium and Gecko databases without sidecars read correctly.
 
 - Stream origin-scoped Chromium Local Storage and strict exact-key reads without retaining unrelated values or populating the whole-store cache. (steipete/CodexBar#4649)
-
 - Fix missing Firefox and other Gecko session cookies by merging ordinary saved-session cookies with SQLite records while excluding unsupported container and partition identities. (#36, thanks @sqmagellan)
 - Match exact cookie domains case-insensitively in Chromium and Gecko SQLite queries, consistent with other query modes.
 - Move CI and release verification to the `xcode-27` runner's default toolchain while retaining macOS 13 support.
