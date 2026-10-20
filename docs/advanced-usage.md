@@ -53,6 +53,8 @@ Chromium and Gecko cookie imports read temporary copies of the database and any 
 
 Firefox and other Gecko imports also read session cookies from the selected profile's `sessionstore-backups/recovery.jsonlz4`, or `recovery.baklz4` when the primary file is missing. These cookies normally have no expiry; explicit expiry values are preserved and filtered like database cookies. The same domain filters apply to both sources. SQLite wins when both sources contain the same host, name, and path. Missing, unreadable, malformed, or oversized recovery files do not prevent database imports; compressed files and decoded JSON are each limited to 64 MiB. Recovery data reflects the browser's last saved session snapshot, so very recent login or logout changes may not yet be present. A corrupt primary file does not fall back to the older backup.
 
+Recovery cookies with container, private-browsing, first-party, GeckoView-session, or partition identity are excluded because `BrowserCookieRecord` cannot represent that isolation. Unknown or malformed origin attributes are excluded too; absent attributes and known default values are accepted. This restriction applies to the recovery reader.
+
 ## Explain Keychain prompts
 
 Chromium-based browsers encrypt cookie values with a Safe Storage credential in macOS Keychain. Set a preflight handler when the host app needs to explain that system prompt before it appears:

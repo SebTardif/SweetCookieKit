@@ -94,6 +94,34 @@ struct GeckoSessionCookieTests {
         #expect(session.expires == nil)
     }
 
+    @Test
+    func `isolated and partitioned recovery cookies are not flattened into ordinary cookies`() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        var container = Self.cookie(name: "login", value: "container")
+        container["originAttributes"] = ["userContextId": 3]
+        var partitioned = Self.cookie(name: "partitioned")
+        partitioned["originAttributes"] = ["partitionKey": "(https,example.org)"]
+        var partitionFlag = Self.cookie(name: "partition-flag")
+        partitionFlag["isPartitioned"] = true
+        var privateCookie = Self.cookie(name: "private")
+        privateCookie["originAttributes"] = ["privateBrowsingId": 1]
+        var firstParty = Self.cookie(name: "first-party")
+        firstParty["originAttributes"] = ["firstPartyDomain": "example.org"]
+        var unknown = Self.cookie(name: "unknown")
+        unknown["originAttributes"] = ["futureIsolation": 1]
+        var malformed = Self.cookie(name: "malformed")
+        malformed["originAttributes"] = "^userContextId=1"
+        var ordinary = Self.cookie(name: "login", value: "ordinary")
+        ordinary["originAttributes"] = [
+            "userContextId": 0, "privateBrowsingId": 0, "firstPartyDomain": "", "partitionKey": "",
+        ]
+        try fixture.writeRecovery(cookies: [
+            container, partitioned, partitionFlag, privateCookie, firstParty, unknown, malformed, ordinary,
+        ])
+        #expect(try fixture.records().map(\.value) == ["synthetic-db", "ordinary"])
+    }
+
     @Test(arguments: [BrowserCookieDomainMatch.exact, .suffix, .contains])
     func `recovery uses requested domain matching`(match: BrowserCookieDomainMatch) throws {
         let fixture = try Fixture()
@@ -207,7 +235,7 @@ struct GeckoSessionCookieTests {
         path: String = "/") -> [String: Any]
     {
         ["host": host, "name": name, "value": value, "path": path,
-         "secure": true, "httponly": true, "originAttributes": "", "sameSite": 0, "schemeMap": 2]
+         "secure": true, "httponly": true, "originAttributes": [:], "sameSite": 0, "schemeMap": 2]
     }
 
     private struct Fixture {

@@ -49,6 +49,7 @@ enum GeckoSessionCookieReader {
 
     private static func cookieRecord(_ entry: Any) -> GeckoCookieImporter.CookieRecord? {
         guard let cookie = entry as? [String: Any],
+              Self.hasDefaultIsolation(cookie),
               let host = cookie["host"] as? String, !host.isEmpty,
               cookie["name"] == nil || cookie["name"] is String,
               cookie["path"] == nil || cookie["path"] is String,
@@ -69,6 +70,28 @@ enum GeckoSessionCookieReader {
             expires: expires,
             isSecure: cookie["secure"] as? Bool ?? false,
             isHTTPOnly: cookie["httponly"] as? Bool ?? false)
+    }
+
+    private static func hasDefaultIsolation(_ cookie: [String: Any]) -> Bool {
+        if let partitioned = cookie["isPartitioned"] {
+            guard let flag = partitioned as? Bool, !flag else { return false }
+        }
+        guard let rawAttributes = cookie["originAttributes"] else { return true }
+        guard let attributes = rawAttributes as? [String: Any] else { return false }
+        // The public record cannot carry container or partition identity. Unknown attributes fail closed.
+        return attributes.allSatisfy { key, value in
+            switch key {
+            case "userContextId", "privateBrowsingId":
+                guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else {
+                    return false
+                }
+                return number.doubleValue == 0
+            case "firstPartyDomain", "partitionKey", "geckoViewSessionContextId":
+                return (value as? String)?.isEmpty == true
+            default:
+                return false
+            }
+        }
     }
 }
 #endif
