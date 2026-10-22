@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Normalize cookie domain contains and suffix filters before the SQLite LIKE, and escape percent and underscore, so the query matches the in-memory matcher. Thanks @SebTardif.
+- Normalize cookie domain contains and suffix filters before the SQLite LIKE, and escape percent and underscore, so the query matches the in-memory matcher. (#44, thanks @SebTardif)
 
 ## 0.5.9 — 2026-10-20
 
