@@ -124,19 +124,19 @@ struct ChromiumLocalStorageReaderTests {
     }
 
     @Test
-    func `matches the same https origin`() {
-        #expect(
-            ChromiumLocalStorageReader.originMatches(
-                "https://example.com",
-                "https://example.com"))
-    }
+    func `reads an uppercase scheme as the same origin`() throws {
+        let levelDBURL = try self.makeLevelDBDirectory()
+        let key = self.localStorageKey(storageKey: "https://example.com", key: "pref")
+        let value = self.localStorageValue("value-scheme")
+        try self.writeLog(entries: [(key, value, false)], to: levelDBURL)
 
-    @Test
-    func `matches a schemeless storage key to the https origin`() {
-        #expect(
-            ChromiumLocalStorageReader.originMatches(
-                "minimax.io",
-                "https://minimax.io"))
+        let entries = ChromiumLocalStorageReader.readEntries(
+            for: "HTTPS://example.com",
+            in: levelDBURL)
+
+        #expect(entries.count == 1)
+        #expect(entries.first?.key == "pref")
+        #expect(entries.first?.value == "value-scheme")
     }
 
     @Test

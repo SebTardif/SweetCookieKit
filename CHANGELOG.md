@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Compare schemes when a Chromium local-storage key and the requested origin both have one, so http and https on the same host stay distinct. A schemeless key still matches that host. (#43, thanks @SebTardif)
+- Compare schemes when a Chromium local-storage key and the requested origin both have one, so http and https on the same host stay distinct. Matching schemes still compare hosts, so an uppercase scheme matches that origin. A schemeless key still matches that host. (#43, thanks @SebTardif)
 
 ## 0.5.9 — 2026-10-20
 
