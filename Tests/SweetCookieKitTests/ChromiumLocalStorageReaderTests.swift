@@ -110,6 +110,42 @@ struct ChromiumLocalStorageReaderTests {
 
         #expect(entries.isEmpty)
     }
+
+    @Test
+    func `does not match http and https on the same host`() {
+        #expect(
+            ChromiumLocalStorageReader.originMatches(
+                "https://example.com",
+                "http://example.com") == false)
+        #expect(
+            ChromiumLocalStorageReader.originMatches(
+                "http://example.com",
+                "https://example.com") == false)
+    }
+
+    @Test
+    func `matches the same https origin`() {
+        #expect(
+            ChromiumLocalStorageReader.originMatches(
+                "https://example.com",
+                "https://example.com"))
+    }
+
+    @Test
+    func `matches a schemeless storage key to the https origin`() {
+        #expect(
+            ChromiumLocalStorageReader.originMatches(
+                "minimax.io",
+                "https://minimax.io"))
+    }
+
+    @Test
+    func `does not match a different host`() {
+        #expect(
+            ChromiumLocalStorageReader.originMatches(
+                "https://example.com",
+                "https://other.example") == false)
+    }
 }
 
 extension ChromiumLocalStorageReaderTests {

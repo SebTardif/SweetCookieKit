@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Compare schemes when a Chromium local-storage key and the requested origin both have one, so http and https on the same host stay distinct. A schemeless key still matches that host. Thanks @SebTardif.
+
 ## 0.5.9 — 2026-10-20
 
 **Highlights:** Origin-filtered Chromium Local Storage reads now stream record by record, so reading one site's values from a large store uses a few MiB instead of hundreds; Firefox and other Gecko session cookies are imported again, and idle WAL-mode Chromium and Gecko databases without sidecars read correctly.
