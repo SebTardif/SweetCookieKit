@@ -91,6 +91,49 @@ struct BrowserCookieDomainMatcherTests {
     }
 
     @Test
+    func sqlCondition_suffixNormalizesLeadingDotAndEscapes() {
+        let sql = BrowserCookieDomainMatcher.sqlCondition(
+            column: "host_key",
+            patterns: [".example.com"],
+            match: .suffix)
+        #expect(sql == "host_key LIKE '%example.com' ESCAPE '\\'")
+        #expect(!sql.contains(".example.com"))
+    }
+
+    @Test
+    func sqlCondition_containsEscapesUnderscore() {
+        let sql = BrowserCookieDomainMatcher.sqlCondition(
+            column: "host_key",
+            patterns: ["a_b"],
+            match: .contains)
+        #expect(sql == "host_key LIKE '%a\\_b%' ESCAPE '\\'")
+        #expect(!sql.contains("LIKE '%a_b%'"))
+    }
+
+    @Test
+    func sqlCondition_emptyPatternsMatchAll() {
+        for match in [BrowserCookieDomainMatch.contains, .suffix, .exact] {
+            let sql = BrowserCookieDomainMatcher.sqlCondition(
+                column: "host_key",
+                patterns: [],
+                match: match)
+            #expect(sql == "1=1")
+        }
+    }
+
+    @Test
+    func sqlCondition_exactStaysNoCaseEquality() {
+        let sql = BrowserCookieDomainMatcher.sqlCondition(
+            column: "host_key",
+            patterns: ["Example.COM"],
+            match: .exact)
+        #expect(sql.contains("COLLATE NOCASE"))
+        #expect(sql.contains("host_key = 'Example.COM'"))
+        #expect(sql.contains("host_key = '.Example.COM'"))
+        #expect(!sql.contains("LIKE"))
+    }
+
+    @Test
     func chromeExpiryDate_roundTrips() {
         let date = Date(timeIntervalSince1970: 1_700_000_000)
         let expiresUTC = Int64((date.timeIntervalSince1970 + 11_644_473_600.0) * 1_000_000.0)
