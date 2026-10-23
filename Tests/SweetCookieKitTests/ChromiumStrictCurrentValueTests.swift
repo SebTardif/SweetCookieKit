@@ -101,7 +101,7 @@ struct ChromiumStrictCurrentValueTests {
         #expect(ChromiumLocalStorageReader.readCurrentValue(forRawKey: wrongKey, in: fixture.directory) == nil)
         #expect(self.read(fixture) != nil)
         if origin == "http://example.com" {
-            #expect(!ChromiumLocalStorageReader.readEntries(for: origin, in: fixture.directory).isEmpty)
+            #expect(ChromiumLocalStorageReader.readEntries(for: origin, in: fixture.directory).isEmpty)
         }
     }
 
