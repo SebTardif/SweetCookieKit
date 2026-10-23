@@ -15,7 +15,7 @@ let query = BrowserCookieQuery(
     includeExpired: false)
 ```
 
-Domain matching supports `.contains`, `.suffix`, and `.exact` and is case-insensitive. An empty `domains` array does not filter by domain.
+Domain matching supports `.contains`, `.suffix`, and `.exact` and is case-insensitive. Patterns are trimmed and one leading dot is ignored. Matching is literal, so `%`, `_`, and backslashes do not act as wildcards in SQLite-backed stores. An empty `domains` array does not filter by domain.
 
 Use a concrete store when the user has selected a profile:
 
