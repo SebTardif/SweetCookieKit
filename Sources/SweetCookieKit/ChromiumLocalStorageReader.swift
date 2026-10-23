@@ -325,7 +325,7 @@ public enum ChromiumLocalStorageReader {
         return origin
     }
 
-    internal static func originMatches(_ storageKeyOrigin: String, _ requestedOrigin: String) -> Bool {
+    private static func originMatches(_ storageKeyOrigin: String, _ requestedOrigin: String) -> Bool {
         if storageKeyOrigin == requestedOrigin {
             return true
         }

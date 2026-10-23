@@ -332,12 +332,13 @@ enum BrowserCookieDomainMatcher {
     static func sqlCondition(column: String, patterns: [String], match: BrowserCookieDomainMatch) -> String {
         guard !patterns.isEmpty else { return "1=1" }
         let clauses: [String] = patterns.map { raw in
-            let value = self.escapeForSQL(raw)
             switch match {
             case .contains:
-                return "\(column) LIKE '%\(value)%'"
+                let value = self.escapeForSQLLike(self.normalizeDomain(raw))
+                return "\(column) LIKE '%\(value)%' ESCAPE '\\'"
             case .suffix:
-                return "\(column) LIKE '%\(value)'"
+                let value = self.escapeForSQLLike(self.normalizeDomain(raw))
+                return "\(column) LIKE '%\(value)' ESCAPE '\\'"
             case .exact:
                 let normalized = self.escapeForSQL(self.normalizeDomain(raw))
                 return "(\(column) = '\(normalized)' COLLATE NOCASE " +
@@ -349,6 +350,22 @@ enum BrowserCookieDomainMatcher {
 
     static func escapeForSQL(_ value: String) -> String {
         value.replacingOccurrences(of: "'", with: "''")
+    }
+
+    /// Escape `\`, `%`, and `_` for a LIKE pattern that uses `ESCAPE '\'`.
+    static func escapeForSQLLike(_ value: String) -> String {
+        var escaped = ""
+        escaped.reserveCapacity(value.count)
+        for character in value {
+            switch character {
+            case "\\", "%", "_":
+                escaped.append("\\")
+                escaped.append(character)
+            default:
+                escaped.append(character)
+            }
+        }
+        return self.escapeForSQL(escaped)
     }
 }
 

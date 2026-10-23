@@ -111,41 +111,34 @@ struct ChromiumLocalStorageReaderTests {
         #expect(entries.isEmpty)
     }
 
-    @Test
-    func `does not match http and https on the same host`() {
-        #expect(
-            ChromiumLocalStorageReader.originMatches(
-                "https://example.com",
-                "http://example.com") == false)
-        #expect(
-            ChromiumLocalStorageReader.originMatches(
-                "http://example.com",
-                "https://example.com") == false)
-    }
-
-    @Test
-    func `reads an uppercase scheme as the same origin`() throws {
+    @Test(arguments: ["http://example.com", "https://example.com", "HTTPS://example.com",
+                      "https://example.com:8443"])
+    func `public reader separates schemes and ports while preserving host only keys`(requested: String) throws {
         let levelDBURL = try self.makeLevelDBDirectory()
-        let key = self.localStorageKey(storageKey: "https://example.com", key: "pref")
-        let value = self.localStorageValue("value-scheme")
-        try self.writeLog(entries: [(key, value, false)], to: levelDBURL)
+        defer { try? FileManager.default.removeItem(at: levelDBURL) }
+        let fixtures = [
+            ("http://example.com", "http"),
+            ("https://example.com", "https"),
+            ("https://example.com:8443", "port"),
+            ("example.com", "host-only"),
+            ("https://other.example", "other-host"),
+        ]
+        let rows = fixtures.map { origin, value in
+            (self.localStorageKey(storageKey: origin, key: value), self.localStorageValue(value), false)
+        }
+        try self.writeLog(entries: rows, to: levelDBURL)
 
-        let entries = ChromiumLocalStorageReader.readEntries(
-            for: "HTTPS://example.com",
-            in: levelDBURL)
-
-        #expect(entries.count == 1)
-        #expect(entries.first?.key == "pref")
-        #expect(entries.first?.value == "value-scheme")
+        let entries = ChromiumLocalStorageReader.readEntries(for: requested, in: levelDBURL)
+        let expected: Set<String>
+        switch requested.lowercased() {
+        case "http://example.com": expected = ["http", "host-only"]
+        case "https://example.com": expected = ["https", "host-only"]
+        default: expected = ["port"]
+        }
+        #expect(Set(entries.map(\.value)) == expected)
+        #expect(entries.count == expected.count)
     }
 
-    @Test
-    func `does not match a different host`() {
-        #expect(
-            ChromiumLocalStorageReader.originMatches(
-                "https://example.com",
-                "https://other.example") == false)
-    }
 }
 
 extension ChromiumLocalStorageReaderTests {
